@@ -19,6 +19,12 @@ type UploadInfo struct {
 	Path      string
 }
 
+func setupResponse(w *http.ResponseWriter, req *http.Request) {
+	(*w).Header().Set("Access-Control-Allow-Origin", "*")
+	(*w).Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+	(*w).Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+}
+
 const (
 	uploadUrl    = "/upload"
 	downloadUrl  = "/download"
@@ -28,6 +34,7 @@ const (
 )
 
 func uploadHandler(w http.ResponseWriter, req *http.Request) {
+	setupResponse(&w, req)
 	contentType := req.Header.Get("content-type")
 	contentLen := req.ContentLength
 
@@ -102,6 +109,7 @@ func uploadHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func getContentType(fileName string) (extension, contentType string) {
+
 	arr := strings.Split(fileName, ".")
 
 	// see: https://tool.oschina.net/commons/
@@ -132,7 +140,7 @@ func getContentType(fileName string) (extension, contentType string) {
 }
 
 func downloadHandler(w http.ResponseWriter, req *http.Request) {
-
+	setupResponse(&w, req)
 	filename := req.RequestURI[1:]
 	log.Printf("filename:%v\n", filename)
 	enEscapeUrl, err := url.QueryUnescape(filename)
@@ -174,6 +182,9 @@ func downloadHandler(w http.ResponseWriter, req *http.Request) {
 func main() {
 	log.Printf("linsten on :%v\n", port)
 	http.HandleFunc(uploadUrl, uploadHandler)
+	http.HandleFunc("/hello", func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte("Hello"))
+	})
 	http.HandleFunc(downloadUrl, downloadHandler)
 	err := http.ListenAndServe(fmt.Sprintf(":%v", port), nil)
 	if err != nil {
