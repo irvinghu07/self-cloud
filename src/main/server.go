@@ -21,6 +21,12 @@ type UploadInfo struct {
 	ResourceID string
 }
 
+func setupResponse(w *http.ResponseWriter, req *http.Request) {
+	(*w).Header().Set("Access-Control-Allow-Origin", "*")
+	(*w).Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+	(*w).Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+}
+
 const (
 	uploadUrl    = "/upload"
 	downloadUrl  = "/"
@@ -51,10 +57,7 @@ func Exists(path string) bool {
 }
 
 func uploadHandler(w http.ResponseWriter, req *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Add("Access-Control-Allow-Headers", "Content-Type")
-	w.Header().Add("Access-Control-Allow-Method", "POST,GET")
-	w.Header().Set("content-type", "application/json")
+	setupResponse(&w, req)
 	contentType := req.Header.Get("content-type")
 	contentLen := req.ContentLength
 
@@ -170,10 +173,7 @@ func getContentType(fileName string) (string, string) {
 }
 
 func downloadHandler(w http.ResponseWriter, req *http.Request) {
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Add("Access-Control-Allow-Headers", "Content-Type")
-	w.Header().Set("content-type", "application/json")
-	log.Println("Request URI: " + req.RequestURI)
+	setupResponse(&w, req)
 	filename := req.RequestURI[1:]
 	log.Printf("filename:%v\n", filename)
 	enEscapeUrl, err := url.QueryUnescape(filename)
@@ -216,6 +216,9 @@ func downloadHandler(w http.ResponseWriter, req *http.Request) {
 func main() {
 	log.Printf("linsten on :%v\n", port)
 	http.HandleFunc(uploadUrl, uploadHandler)
+	http.HandleFunc("/hello", func(w http.ResponseWriter, req *http.Request) {
+		w.Write([]byte("Hello"))
+	})
 	http.HandleFunc(downloadUrl, downloadHandler)
 	err := http.ListenAndServe(fmt.Sprintf(":%v", port), nil)
 	if err != nil {

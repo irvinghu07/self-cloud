@@ -2,6 +2,9 @@
 .DS_Store
 output/
 
+# Media Resource Folder
+resources/
+
 # Binaries for programs and plugins
 *.exe
 *.exe~
@@ -17,3 +20,5 @@ output/
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+bin/
+pkg/
