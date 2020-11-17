@@ -10,13 +10,15 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 )
 
 type UploadInfo struct {
-	Original  string
-	Processed string
-	Path      string
+	Original   string
+	Processed  string
+	Path       string
+	ResourceID string
 }
 
 func setupResponse(w *http.ResponseWriter, req *http.Request) {
@@ -27,11 +29,32 @@ func setupResponse(w *http.ResponseWriter, req *http.Request) {
 
 const (
 	uploadUrl    = "/upload"
-	downloadUrl  = "/download"
+	downloadUrl  = "/"
 	port         = 7777
 	mediaMaxSize = 500 * 1024 * 1024
 	resourcePath = "./resources/"
 )
+
+func init() {
+	if !Exists(resourcePath) {
+		syscall.Umask(0)
+		err := os.Mkdir(resourcePath, os.FileMode(0766))
+		if err != nil {
+			log.Fatal(err.Error())
+		}
+	}
+}
+
+func Exists(path string) bool {
+	_, err := os.Stat(path) //os.Stat获取文件信息
+	if err != nil {
+		if os.IsExist(err) {
+			return true
+		}
+		return false
+	}
+	return true
+}
 
 func uploadHandler(w http.ResponseWriter, req *http.Request) {
 	setupResponse(&w, req)
@@ -40,8 +63,8 @@ func uploadHandler(w http.ResponseWriter, req *http.Request) {
 
 	log.Printf("uploadHandler content-type:%s\ncontent-length:%d\n", contentType, contentLen)
 	if !strings.Contains(contentType, "multipart/form-data") {
-		http.Error(w, "please upload media", http.StatusForbidden)
-		log.Println("please upload media")
+		http.Error(w, "please upload media"+contentType, http.StatusForbidden)
+		log.Println("please upload media" + contentType)
 		return
 	}
 
@@ -81,11 +104,16 @@ func uploadHandler(w http.ResponseWriter, req *http.Request) {
 			resourceName := fmt.Sprintf("%v.%v", time.Now().Nanosecond(), strings.Split(f.Filename, ".")[1])
 			path := fmt.Sprintf("%v%v", resourcePath, resourceName)
 			log.Printf("about to save file in Path: %v\n", path)
-			fileSaveDestination, _ := os.Create(path)
+			fileSaveDestination, err := os.Create(path)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				log.Println(err.Error())
+				return
+			}
 			_, err = io.Copy(fileSaveDestination, fileResource)
 			if err != nil {
-				http.Error(w, "saving file failed: copy", http.StatusInternalServerError)
-				log.Println("saving file failed: copy")
+				http.Error(w, "saving file failed: "+err.Error(), http.StatusInternalServerError)
+				log.Println("saving file failed: " + err.Error())
 				return
 			}
 			err = fileSaveDestination.Close()
@@ -95,7 +123,8 @@ func uploadHandler(w http.ResponseWriter, req *http.Request) {
 				return
 			}
 			log.Printf("successful uploaded,Original fileName=%s, Processed fileName%s,savePath=%s \n", f.Filename, resourceName, path)
-			respRaw := UploadInfo{Original: f.Filename, Processed: resourceName, Path: path}
+			resourceID := url.QueryEscape(resourceName)
+			respRaw := UploadInfo{Original: f.Filename, Processed: resourceName, Path: path, ResourceID: resourceID}
 			log.Printf("generating response JSON:%v\n", respRaw)
 			resp, err := json.Marshal(respRaw)
 			if err != nil {
@@ -108,15 +137,16 @@ func uploadHandler(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func getContentType(fileName string) (extension, contentType string) {
-
+func getContentType(fileName string) (string, string) {
 	arr := strings.Split(fileName, ".")
-
+	var contentType string
+	var extension string
 	// see: https://tool.oschina.net/commons/
 	if len(arr) >= 2 {
 		extension = arr[len(arr)-1]
 		switch extension {
 		case "jpeg", "jpe", "jpg":
+			log.Println("Inside")
 			contentType = "image/jpeg"
 		case "png":
 			contentType = "image/png"
@@ -132,11 +162,14 @@ func getContentType(fileName string) (extension, contentType string) {
 			contentType = "application/pdf"
 		case "doc", "":
 			contentType = "application/msword"
+		default:
+			contentType = ""
 		}
+		return extension, contentType
 	}
 	// .*（ 二进制流，不知道下载文件类型）
 	contentType = "application/octet-stream"
-	return
+	return extension, contentType
 }
 
 func downloadHandler(w http.ResponseWriter, req *http.Request) {
@@ -162,6 +195,7 @@ func downloadHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	_, contentType := getContentType(filename)
+	log.Printf("Fetching media: %v with contentType:%v", filename, contentType)
 	w.Header().Set("Content-Disposition", "attachment; filename="+filename)
 	//w.Header().Set("Content-Type", http.DetectContentType(fileHeader))
 	w.Header().Set("Content-Type", contentType)
